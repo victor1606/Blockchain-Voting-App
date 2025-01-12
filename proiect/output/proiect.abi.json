@@ -1,0 +1,102 @@
+{
+    "buildInfo": {
+        "rustc": {
+            "version": "1.84.0",
+            "commitHash": "9fc6b43126469e3858e2fe86cafb4f0fd5068869",
+            "commitDate": "2025-01-07",
+            "channel": "Stable",
+            "short": "rustc 1.84.0 (9fc6b4312 2025-01-07)"
+        },
+        "contractCrate": {
+            "name": "proiect",
+            "version": "0.0.0"
+        },
+        "framework": {
+            "name": "multiversx-sc",
+            "version": "0.55.0"
+        }
+    },
+    "name": "Proiect",
+    "constructor": {
+        "inputs": [],
+        "outputs": []
+    },
+    "endpoints": [
+        {
+            "name": "getVoterInfo",
+            "mutability": "readonly",
+            "inputs": [],
+            "outputs": [
+                {
+                    "type": "variadic<bytes>",
+                    "multi_result": true
+                }
+            ]
+        },
+        {
+            "name": "getWalletVoters",
+            "mutability": "readonly",
+            "inputs": [],
+            "outputs": [
+                {
+                    "type": "variadic<Address>",
+                    "multi_result": true
+                }
+            ]
+        },
+        {
+            "name": "getResults",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "candidate_code",
+                    "type": "bytes"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "u64"
+                }
+            ]
+        },
+        {
+            "name": "registerAndVote",
+            "mutability": "mutable",
+            "inputs": [
+                {
+                    "name": "cnp",
+                    "type": "bytes"
+                },
+                {
+                    "name": "candidate_code",
+                    "type": "bytes"
+                }
+            ],
+            "outputs": []
+        },
+        {
+            "name": "getElectionInfo",
+            "mutability": "readonly",
+            "inputs": [],
+            "outputs": [
+                {
+                    "type": "bytes"
+                }
+            ]
+        },
+        {
+            "name": "getAllResults",
+            "mutability": "readonly",
+            "inputs": [],
+            "outputs": [
+                {
+                    "type": "variadic<multi<bytes,u64>>",
+                    "multi_result": true
+                }
+            ]
+        }
+    ],
+    "esdtAttributes": [],
+    "hasCallback": false,
+    "types": {}
+}
