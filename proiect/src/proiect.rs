@@ -42,13 +42,6 @@ pub trait Proiect {
             "This wallet has already voted!"
         );
 
-        // // Validate CNP: Must be exactly 13 digits
-        // let cnp_bytes = cnp.to_boxed_bytes();
-        // require!(
-        //     cnp_bytes.len() == 13,
-        //     "Invalid CNP format. Must be exactly 13 digits."
-        // );
-
         // Validate candidate code length to prevent large input allocation
         require!(
             candidate_code.len() <= 10,

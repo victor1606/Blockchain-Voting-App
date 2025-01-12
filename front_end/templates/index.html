@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<ul>
+    <li><a href="{{ url_for('election_info') }}">Get Election Info</a></li>
+    <li><a href="{{ url_for('results') }}">View Results</a></li>
+    <li><a href="{{ url_for('vote') }}">Vote</a></li>
+</ul>
+{% endblock %}

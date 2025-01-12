@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Election Info</h2>
+<pre>{{ info }}</pre>
+<ul>
+    {% for candidate in candidates %}
+        <li>{{ candidate }}</li>
+    {% endfor %}
+</ul>
+<a href="{{ url_for('index') }}">Back to Home</a>
+{% endblock %}

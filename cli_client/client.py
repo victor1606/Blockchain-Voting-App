@@ -7,6 +7,7 @@ import sys
 import time
 import hashlib
 import base64
+import json
 from pathlib import Path
 from multiversx_sdk import *
 from multiversx_sdk_core import *
@@ -83,6 +84,8 @@ def decode_smart_contract_response(response):
 DEVNET_PROXY_URL = "https://devnet-api.multiversx.com"
 SC_ADDRESS = "erd1qqqqqqqqqqqqqpgq8y24lpxfwcfu46k3ntjtsfppzht3teuxd8ss0t6ty7"
 GAS_LIMIT = 10_000_000
+CANDIDATES = []
+CANDIDATE_FILE_PATH = "candidates.json"
 
 ###############################################################################
 # Core Functions
@@ -135,7 +138,9 @@ def register_and_vote(pem_file_path: str, personal_info: str, candidate_code: st
         if response:
             decoded_response = decode_smart_contract_response(response)
             print(f"[+] Smart Contract Response: {decoded_response}")
-            # print(f"[+] Smart Contract Response: {response}")
+            if decoded_response == "OK":
+                print(f"\n[+] RESULT: Successfully cast vote to candidate - {candidate_code}")
+
         else:
             print("[!] No positive response from the smart contract.")
 
@@ -143,28 +148,6 @@ def register_and_vote(pem_file_path: str, personal_info: str, candidate_code: st
         print("[!] Error during transaction:", e)
     except ValueError as e:
         print(f"[!] {e}")
-
-def get_vote_count(candidate_code: str):
-    try:
-        proxy_provider = ProxyNetworkProvider(DEVNET_PROXY_URL)
-        query_runner = QueryRunnerAdapter(proxy_provider)
-        query_controller = SmartContractQueriesController(query_runner)
-
-        response = query_controller.query(
-            contract=SC_ADDRESS,
-            function="getResults",
-            arguments=[candidate_code.encode('utf-8').hex()]
-        )
-
-        if isinstance(response, list) and response:
-            vote_count_bytes = response[0]
-            vote_count = int.from_bytes(vote_count_bytes, byteorder='big')
-            print(f"[+] Total votes for candidate {candidate_code}: {vote_count}")
-        else:
-            print("[!] No data returned or empty response from the smart contract.")
-
-    except GenericError as e:
-        print(f"[!] Failed to fetch vote count: {e}")
 
 def get_election_info():
     try:
@@ -182,14 +165,31 @@ def get_election_info():
             info_bytes = response[0]
             info_str = bytes.fromhex(info_bytes.hex()).decode('utf-8')
             print("[+] Election Info:\n" + info_str)
+
+            lines = info_str.splitlines()
+            for line in lines:
+                if " - " in line:
+                    _, name = line.split(" - ", 1)  # Split on " - " and get the name
+                    CANDIDATES.append(name.strip())
+            
+            with open(CANDIDATE_FILE_PATH, "w") as file:
+                json.dump(CANDIDATES, file)
+            print(f"[+] Candidate list saved to '{CANDIDATE_FILE_PATH}'.")
         else:
             print("[!] No election info available.")
-
 
     except GenericError as e:
         print(f"[!] Failed to fetch election info: {e}")
 
 def get_all_results():
+    try:
+        with open(CANDIDATE_FILE_PATH, "r") as file:
+            CANDIDATES = json.load(file)
+    except FileNotFoundError:
+        print(f"[!] Candidate file '{CANDIDATE_FILE_PATH}' not found. Please run the info command first.")
+    except json.JSONDecodeError:
+        print(f"[!] Failed to decode the candidate list from '{CANDIDATE_FILE_PATH}'.")
+    
     try:
         proxy_provider = ProxyNetworkProvider(DEVNET_PROXY_URL)
         query_runner = QueryRunnerAdapter(proxy_provider)
@@ -203,12 +203,11 @@ def get_all_results():
 
         if isinstance(response, list) and response:
             print("Election results:")
-            
             for i in range(0, len(response), 2):
                 candidate_code = bytes.fromhex(response[i].hex()).decode('utf-8')
                 vote_count = int.from_bytes(response[i + 1], byteorder='big')
-
-                print(f"[+] Candidate code: {candidate_code}: {vote_count} votes")
+                if len(CANDIDATES) > 0:
+                    print(f"[+] Name: {CANDIDATES[i // 2]} - Candidate code: {candidate_code}: {vote_count} votes")
         else:
             print("[!] No voting results available.")
 
@@ -223,7 +222,6 @@ def main():
     if len(sys.argv) < 2:
         print("Usage:\n"
               "  python3 client.py vote <path_to_pem> <personal_info> <candidate_code>\n"
-              "  python3 client.py count <candidate_code>\n"
               "  python3 client.py info\n"
               "  python3 client.py results")
         sys.exit(1)
@@ -249,14 +247,6 @@ def main():
 
         register_and_vote(pem_file_path, personal_info, candidate_code)
 
-    elif command == "count":
-        if len(sys.argv) != 3:
-            print("Usage: python3 client.py count <candidate_code>")
-            sys.exit(1)
-
-        candidate_code = sys.argv[2]
-        get_vote_count(candidate_code)
-
     elif command == "info":
         get_election_info()
 
@@ -264,7 +254,7 @@ def main():
         get_all_results()
 
     else:
-        print("[!] Unknown command. Use 'vote', 'count', 'info', or 'results'.")
+        print("[!] Unknown command. Use 'vote', 'info', or 'results'.")
 
 if __name__ == "__main__":
     main()
