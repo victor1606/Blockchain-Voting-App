@@ -8,6 +8,8 @@ from multiversx_sdk_network_providers.errors import GenericError
 import base64
 import hashlib
 import re
+from PIL import Image
+import pytesseract
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key"
@@ -19,11 +21,12 @@ GAS_LIMIT = 10_000_000
 CANDIDATE_FILE_PATH = "candidates.json"
 UPLOAD_FOLDER = "user_wallets"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
 class ProxyNetworkProviderWithStatus(ProxyNetworkProvider):
     def get_transaction(self, tx_hash: str) -> Transaction:
         return super().get_transaction(tx_hash, with_process_status=True)
-    
+
 # Utilities
 def extract_address_from_pem(pem_file_path: str) -> str:
     with open(pem_file_path, "r") as pem_file:
@@ -37,32 +40,30 @@ def hash_personal_info(personal_info: str, salt: str = "unique_salt") -> str:
     data = personal_info + salt
     return hashlib.sha256(data.encode()).hexdigest()
 
-def extract_and_log_smart_contract_errors(response):
-    try:
-        logs = response.get("logs", {})
-        events = logs.get("events", [])
-
-        for event in events:
-            identifier = event.get("identifier")
-            if identifier == "internalVMErrors":
-                encoded_data = event.get("data", "")
-                decoded_data = base64.b64decode(encoded_data).decode("utf-8")
-
-                # Remove technical details: runtime.go references, [registerAndVote], etc.
-                cleaned_message = re.sub(r'runtime\.go:\d+\s*\[.*?\]\s*', '', decoded_data)
-                cleaned_message = re.sub(r'\[.*?\]', '', cleaned_message).strip()
-
-                # Extract the most meaningful part of the error (e.g., the last sentence)
-                user_friendly_message = cleaned_message.splitlines()[-1].strip()
-
-                return user_friendly_message  # Return clean, user-friendly message
-
-        return None  # No errors found
-
-    except Exception as e:
-        return f"Failed to extract error details: {e}"
-
-import re
+# def extract_and_log_smart_contract_errors(response):
+#     try:
+#         logs = response.get("logs", {})
+#         events = logs.get("events", [])
+#
+#         for event in events:
+#             identifier = event.get("identifier")
+#             if identifier == "internalVMErrors":
+#                 encoded_data = event.get("data", "")
+#                 decoded_data = base64.b64decode(encoded_data).decode("utf-8")
+#
+#                 # Remove technical details: runtime.go references, [registerAndVote], etc.
+#                 cleaned_message = re.sub(r'runtime\.go:\d+\s*\[.*?\]\s*', '', decoded_data)
+#                 cleaned_message = re.sub(r'\[.*?\]', '', cleaned_message).strip()
+#
+#                 # Extract the most meaningful part of the error (e.g., the last sentence)
+#                 user_friendly_message = cleaned_message.splitlines()[-1].strip()
+#
+#                 return user_friendly_message  # Return clean, user-friendly message
+#
+#         return None  # No errors found
+#
+#     except Exception as e:
+#         return f"Failed to extract error details: {e}"
 
 def extract_and_log_smart_contract_errors(response):
     try:
@@ -70,7 +71,7 @@ def extract_and_log_smart_contract_errors(response):
         events = logs.get("events", [])
 
         if not events:
-            return "An unknown error occurred. No detailed error logs available."
+            return None
 
         for event in events:
             identifier = event.get("identifier")
@@ -81,7 +82,7 @@ def extract_and_log_smart_contract_errors(response):
                     return "Smart contract error occurred, but no details were provided."
 
                 decoded_data = base64.b64decode(encoded_data).decode("utf-8")
-                to_remove = ["runtime.go:853","runtime.go:856", "[registerAndVote]", "[error signalled by smartcontract]", "[", "]"]
+                to_remove = ["runtime.go:853","runtime.go:856", "[registerAndVote]", "[error signalled by smartcontract]", "[", "]", "Url = [https://devnet-api.multiversx.com/transaction/send], error = {'data': None, 'error': 'transaction generation failed: ", ", 'code': 'internal_issue'}"]
 
                 for substring in to_remove:
                     decoded_data = decoded_data.replace(substring, "")
@@ -124,23 +125,42 @@ def vote():
     logs = []
 
     pem_file = request.files.get("pem_file")
-    personal_info = request.form.get("personal_info")
+    entered_cnp = request.form.get("personal_info")
     candidate_code = request.form.get("candidate_code")
+    id_card_photo = request.files.get("id_card_photo")
+    print(id_card_photo.filename.endswith(".jpg"))
 
-    # Input validation with log messages
     if not pem_file or not pem_file.filename.endswith(".pem"):
         logs.append("[!] Please upload a valid .pem file!")
         return jsonify({"status": "error", "logs": logs}), 400
 
-    if len(personal_info) != 13:
-        logs.append("[!] CNP must be 13 digits!")
+    if not id_card_photo.filename.endswith(".jpg"):
+        logs.append("[!] Please upload a valid image!")
         return jsonify({"status": "error", "logs": logs}), 400
 
-    if len(candidate_code) != 3:
-        logs.append("[!] Candidate code must be 3 digits!")
-        return jsonify({"status": "error", "logs": logs}), 400
+    print(logs)
 
     try:
+        # Process the ID card photo
+        id_card_image = Image.open(id_card_photo)
+        extracted_text = pytesseract.image_to_string(id_card_image, lang="eng")
+
+        # Extract CNP from the text
+        cnp_match = re.search(r'\b\d{13}\b', extracted_text)
+        if not cnp_match:
+            print("Could not extract CNP from the uploaded image.")
+            logs.append("[!] Could not extract CNP from the uploaded image.")
+            return jsonify({"status": "error", "logs": logs}), 400
+
+        extracted_cnp = cnp_match.group(0)
+        print(f"[+] Extracted CNP: {extracted_cnp}")
+
+        # Compare the extracted CNP with the entered CNP
+        # if entered_cnp != extracted_cnp:
+        #     print("The entered CNP does not match the CNP extracted from the ID card.")
+        #     logs.append("[!] The entered CNP does not match the CNP extracted from the ID card.")
+        #     return jsonify({"status": "error", "logs": logs}), 400
+
         # Save the PEM file
         pem_path = os.path.join(UPLOAD_FOLDER, pem_file.filename)
         pem_file.save(pem_path)
@@ -158,7 +178,7 @@ def vote():
         sender_nonce = proxy_provider.get_account(Address.from_bech32(tx_address)).nonce
 
         # Prepare transaction data
-        info_hash = hash_personal_info(personal_info)
+        info_hash = hash_personal_info(entered_cnp)  # Use the entered CNP
         data = f"registerAndVote@{info_hash.encode('utf-8').hex()}@{candidate_code.encode('utf-8').hex()}"
 
         # Create and sign transaction
@@ -218,7 +238,6 @@ def election_info():
         if isinstance(response, list) and response:
             info_bytes = response[0]
             info_str = bytes.fromhex(info_bytes.hex()).decode("utf-8")
-            print(info_str)
             return jsonify({"status": "success", "info": info_str}), 200
         return jsonify({"status": "error", "message": "No election info available."}), 404
 

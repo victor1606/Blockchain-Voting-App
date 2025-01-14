@@ -88,8 +88,12 @@ $(document).ready(function () {
                 displayLogs(response.logs, logType);
                 toggleLoading(false);
             },
-            error: function (xhr) {
-                displayLogs(["An error occurred. Please try again."], 'danger');
+            error: function (response) {
+                const logType = response.status === 'success' ? 'success' : 'danger';
+                console.log(response.responseJSON.logs)
+                console.log(logType)
+                displayLogs(response.responseJSON.logs, logType);
+                //displayLogs(["An error occurred. Please try again."], 'danger');
                 toggleLoading(false);
             }
         });
