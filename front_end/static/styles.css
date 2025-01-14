@@ -1,0 +1,17 @@
+body {
+    font-size: 18px;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+@media (max-width: 768px) {
+    .responsive-box {
+        flex: 100%;
+        min-width: 100%;
+    }
+
+    #messages {
+        border-left: none;
+        border-top: 1px solid #ccc;
+        margin-top: 10px;
+    }
+}

@@ -1,11 +1,30 @@
 // Function to fetch election info
 function fetchElectionInfo() {
     $.get('/info', function (data) {
-        $('#infoContent').html(`<pre>${data.info}</pre>`);
+        let content = data.info.trim();
+
+        // Check if the content is JSON (structured data)
+        try {
+            let infoData = JSON.parse(content);
+            let html = '<ul>';
+
+            for (const [key, value] of Object.entries(infoData)) {
+                html += `<li><strong>${key}:</strong> ${value}</li>`;
+            }
+
+            html += '</ul>';
+            $('#infoContent').html(html);
+
+        } catch (e) {
+            // If it's plain text, display it as a formatted paragraph
+            $('#infoContent').html(`<p>${content.replace(/\n/g, '<br>')}</p>`);
+        }
+
     }).fail(function () {
         $('#infoContent').html('<span class="text-danger">Failed to load election info.</span>');
     });
 }
+
 
 // Function to fetch election results
 function fetchElectionResults() {
@@ -27,40 +46,53 @@ $(document).ready(function () {
     fetchElectionResults();
 });
 
-// Refresh data on button click
-$('#infoBtn').click(function () {
-    fetchElectionInfo();
-});
+function toggleLoading(isLoading) {
+    const loader = document.getElementById('loader');
+    const buttons = document.querySelectorAll('#buttonGroup button');
 
-$('#resultsBtn').click(function () {
-    fetchElectionResults();
-});
+    if (isLoading) {
+        loader.style.display = 'block';
+        buttons.forEach(button => button.disabled = true); // Disable buttons
+    } else {
+        loader.style.display = 'none';
+        buttons.forEach(button => button.disabled = false); // Enable buttons
+    }
+}
 
-// Handle Vote Form Submission
-$('#voteForm').submit(function (e) {
-    e.preventDefault(); // Prevent the default form submission (redirection)
+function displayLogs(logs, type = 'info') {
+    const messagesDiv = document.getElementById('messages');
+    messagesDiv.innerHTML = '';  // Clear previous messages
 
-    const formData = new FormData(this);
+    logs.forEach(log => {
+        const messageElement = document.createElement('div');
+        messageElement.className = `alert alert-${type}`;
+        messageElement.textContent = log;
+        messagesDiv.appendChild(messageElement);
+    });
+}
 
-    $.ajax({
-        url: '/vote', // Target endpoint
-        method: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        success: function (response) {
-            // Display success response dynamically
-            let html = '<ul>';
-            html += `<li><strong>Transaction Hash:</strong> ${response.transaction_hash}</li>`;
-            html += `<li><strong>Message:</strong> ${response.message}</li>`;
-            html += `<li><strong>Smart Contract Response:</strong> ${response.smart_contract_response}</li>`;
-            html += '</ul>';
-            $('#itachi').html(html); // Display in resultsContent container
-        },
-        error: function (xhr) {
-            // Display error response dynamically
-            const errorMessage = xhr.responseJSON?.message || 'An unexpected error occurred.';
-            $('#itachi').html(`<span class="text-danger">${errorMessage}</span>`);
-        },
+$(document).ready(function () {
+    $('#voteForm').on('submit', function (e) {
+        e.preventDefault();
+
+        let formData = new FormData(this);
+        toggleLoading(true);
+        $.ajax({
+            url: '/vote',
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                const logType = response.status === 'success' ? 'success' : 'danger';
+                displayLogs(response.logs, logType);
+                toggleLoading(false);
+            },
+            error: function (xhr) {
+                displayLogs(["An error occurred. Please try again."], 'danger');
+                toggleLoading(false);
+            }
+        });
     });
 });
+

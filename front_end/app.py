@@ -38,6 +38,8 @@ def hash_personal_info(personal_info: str, salt: str = "unique_salt") -> str:
     return hashlib.sha256(data.encode()).hexdigest()
 
 
+import re
+
 def extract_and_log_smart_contract_errors(response):
     try:
         logs = response.get("logs", {})
@@ -46,46 +48,54 @@ def extract_and_log_smart_contract_errors(response):
         for event in events:
             identifier = event.get("identifier")
             if identifier == "internalVMErrors":
-                # Extract the 'data' field containing base64 encoded errors
                 encoded_data = event.get("data", "")
-
-                # Decode the base64 data to get the error message
                 decoded_data = base64.b64decode(encoded_data).decode("utf-8")
 
-                flash(f"[!] Smart Contract Response Details:\n{decoded_data}")
-                return decoded_data  # Return error details if found
+                # Remove technical details: runtime.go references, [registerAndVote], etc.
+                cleaned_message = re.sub(r'runtime\.go:\d+\s*\[.*?\]\s*', '', decoded_data)
+                cleaned_message = re.sub(r'\[.*?\]', '', cleaned_message).strip()
 
-        flash("[+] No internal VM errors found in the transaction response.")
-        return None
+                # Extract the most meaningful part of the error (e.g., the last sentence)
+                user_friendly_message = cleaned_message.splitlines()[-1].strip()
+
+                return user_friendly_message  # Return clean, user-friendly message
+
+        return None  # No errors found
 
     except Exception as e:
-        flash(f"[!] Failed to extract error details: {e}")
-        return None
+        return f"Failed to extract error details: {e}"
 
-def extract_and_print_smart_contract_errors(response):
+import re
+
+def extract_and_log_smart_contract_errors(response):
     try:
         logs = response.get("logs", {})
         events = logs.get("events", [])
 
+        if not events:
+            return "An unknown error occurred. No detailed error logs available."
+
         for event in events:
             identifier = event.get("identifier")
             if identifier == "internalVMErrors":
-                # Extract the 'data' field containing base64 encoded errors
                 encoded_data = event.get("data", "")
-                
-                # Decode the base64 data to get the error message
-                decoded_data = base64.b64decode(encoded_data).decode('utf-8')
-                
-                print("[!] Smart Contract Response Details:\n")
-                flash(f"[!] Smart Contract Response Details:\n{decoded_data}")
-                print(decoded_data)
-                flash(decoded_data)
-                return  # Exit after printing the error
 
-        print("[+] No internal VM errors found in the transaction response.")
+                if not encoded_data:
+                    return "Smart contract error occurred, but no details were provided."
 
-    except Exception as e:
-        print(f"[!] Failed to extract error details: {e}")
+                decoded_data = base64.b64decode(encoded_data).decode("utf-8")
+                to_remove = ["runtime.go:853","runtime.go:856", "[registerAndVote]", "[error signalled by smartcontract]", "[", "]"]
+
+                for substring in to_remove:
+                    decoded_data = decoded_data.replace(substring, "")
+
+                return decoded_data.strip()
+        return None  # No internal VM errors found
+
+    except (IndexError, KeyError, ValueError, TypeError) as e:
+        # Handle cases where unexpected data structures are encountered
+        return f"Failed to extract smart contract error details: {str(e)}"
+
 
 def decode_smart_contract_response(response):
     if response.startswith("@"):
@@ -115,16 +125,24 @@ def index():
 
 @app.route("/vote", methods=["POST"])
 def vote():
+    logs = []
+
     pem_file = request.files.get("pem_file")
     personal_info = request.form.get("personal_info")
     candidate_code = request.form.get("candidate_code")
 
+    # Input validation with log messages
     if not pem_file or not pem_file.filename.endswith(".pem"):
-        return jsonify({"status": "error", "message": "Please upload a valid .pem file!"}), 400
+        logs.append("[!] Please upload a valid .pem file!")
+        return jsonify({"status": "error", "logs": logs}), 400
+
     if len(personal_info) != 13:
-        return jsonify({"status": "error", "message": "CNP must be 13 digits!"}), 400
+        logs.append("[!] CNP must be 13 digits!")
+        return jsonify({"status": "error", "logs": logs}), 400
+
     if len(candidate_code) != 3:
-        return jsonify({"status": "error", "message": "Candidate code must be 3 digits!"}), 400
+        logs.append("[!] Candidate code must be 3 digits!")
+        return jsonify({"status": "error", "logs": logs}), 400
 
     try:
         # Save the PEM file
@@ -133,6 +151,7 @@ def vote():
 
         # Extract wallet address and signer
         tx_address = extract_address_from_pem(pem_path)
+        logs.append(f"[+] Extracted wallet address: {tx_address}")
         signer = UserSigner.from_pem_file(Path(pem_path))
 
         # Initialize Proxy and Transaction Awaiter
@@ -161,38 +180,36 @@ def vote():
 
         # Send transaction
         tx_hash = proxy_provider.send_transaction(transaction)
+        logs.append(f"[+] Transaction sent. Tx Hash: {tx_hash}")
         print(f"[+] Transaction sent. Tx Hash: {tx_hash}")
 
         # Wait for confirmation
-        print("[*] Waiting for transaction confirmation...")
         completed_tx = awaiter_with_status.await_completed(tx_hash)
+        logs.append("[+] Transaction confirmed on the blockchain.")
         print("[+] Transaction confirmed on the blockchain.")
 
         # Check for smart contract response and errors
         raw_response = completed_tx.raw_response
-        extract_and_print_smart_contract_errors(raw_response)
+        error_message = extract_and_log_smart_contract_errors(raw_response)
+        if error_message:
+            logs.append(f"[!] Smart Contract Error: {error_message}")
+            print(f"[!] Smart Contract Error: {error_message}")
 
         # Decode smart contract response
         response = extract_data_field(raw_response)
         decoded_response = decode_smart_contract_response(response) if response else "No response"
+        # logs.append(f"[+] Smart Contract Response: {decoded_response}")
 
-        print(f"[+] Smart Contract Response: {decoded_response}")
-
-        # return jsonify({
-        #     "status": "success",
-        #     "transaction_hash": tx_hash,
-        #     "message": "Transaction confirmed on the blockchain.",
-        #     "smart_contract_response": decoded_response
-        # }), 200
-        return render_template('base.html')
-        # return redirect(url_for("index"))
+        return jsonify({
+            "status": "success",
+            "transaction_hash": tx_hash,
+            "logs": logs
+        }), 200
 
     except Exception as e:
-        print(f"[!] Error during voting: {e}")
-        # return jsonify({"status": "error", "message": str(e)}), 500
-        return render_template('base.html')
-        # return redirect(url_for("index"))
-
+        error_log = f"[!] Error during voting: {e}"
+        logs.append(error_log)
+        return jsonify({"status": "error", "logs": logs}), 500
 
 @app.route("/info")
 def election_info():
