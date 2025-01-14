@@ -38,10 +38,14 @@
                     <label for="personal_info" class="form-label">CNP</label>
                     <input type="text" id="personal_info" name="personal_info" class="form-control" required>
                 </div>
+
                 <div class="mb-3">
                     <label for="candidate_code" class="form-label">Candidate Code</label>
-                    <input type="text" id="candidate_code" name="candidate_code" class="form-control" required>
+                    <select id="candidate_code" name="candidate_code" class="form-control" required>
+                        <option value="">Select a candidate...</option>
+                    </select>
                 </div>
+                
                 
                 <div id="buttonGroup" style="display: flex; align-items: center; gap: 10px;">
                     <button type="submit" class="btn btn-primary">Submit Vote</button>
@@ -51,8 +55,6 @@
                         </div>
                     </div>
                 </div>
-                
-
             </form>
             
             <div id="itachi" class="mt-4">

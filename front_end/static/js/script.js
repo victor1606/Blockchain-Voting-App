@@ -3,21 +3,21 @@ function fetchElectionInfo() {
     $.get('/info', function (data) {
         let content = data.info.trim();
 
-        // Check if the content is JSON (structured data)
-        try {
-            let infoData = JSON.parse(content);
-            let html = '<ul>';
+        // Display the raw info in the infoContent section
+        $('#infoContent').html(`<p>${content.replace(/\n/g, '<br>')}</p>`);
 
-            for (const [key, value] of Object.entries(infoData)) {
-                html += `<li><strong>${key}:</strong> ${value}</li>`;
-            }
+        // Extract candidate codes and names from the string
+        const candidateDropdown = $('#candidate_code');
+        candidateDropdown.empty(); // Clear existing options
+        candidateDropdown.append('<option value="">Select a candidate...</option>');
 
-            html += '</ul>';
-            $('#infoContent').html(html);
+        const candidatePattern = /^\s*(\d{3})\s*-\s*(.+)$/gm;  // Matches only 3-digit codes at the start of lines
+        let match;
 
-        } catch (e) {
-            // If it's plain text, display it as a formatted paragraph
-            $('#infoContent').html(`<p>${content.replace(/\n/g, '<br>')}</p>`);
+        while ((match = candidatePattern.exec(content)) !== null) {
+            const code = match[1].trim();
+            const name = match[2].trim();
+            candidateDropdown.append(`<option value="${code}">${name} (${code})</option>`);
         }
 
     }).fail(function () {

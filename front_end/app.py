@@ -7,6 +7,7 @@ from multiversx_sdk_core import *
 from multiversx_sdk_network_providers.errors import GenericError
 import base64
 import hashlib
+import re
 
 app = Flask(__name__)
 app.secret_key = "your_secret_key"
@@ -32,13 +33,9 @@ def extract_address_from_pem(pem_file_path: str) -> str:
         else:
             raise ValueError("Invalid PEM file format. Could not extract address.")
 
-
 def hash_personal_info(personal_info: str, salt: str = "unique_salt") -> str:
     data = personal_info + salt
     return hashlib.sha256(data.encode()).hexdigest()
-
-
-import re
 
 def extract_and_log_smart_contract_errors(response):
     try:
@@ -117,7 +114,6 @@ def extract_data_field(transaction_details) -> str:
 def get_account_nonce(proxy_provider: ProxyNetworkProvider, address: Address) -> int:
     account_info = proxy_provider.get_account(address)
     return account_info.nonce
-
 
 @app.route("/")
 def index():
@@ -222,6 +218,7 @@ def election_info():
         if isinstance(response, list) and response:
             info_bytes = response[0]
             info_str = bytes.fromhex(info_bytes.hex()).decode("utf-8")
+            print(info_str)
             return jsonify({"status": "success", "info": info_str}), 200
         return jsonify({"status": "error", "message": "No election info available."}), 404
 
